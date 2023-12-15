@@ -1,5 +1,5 @@
 import asyncio
-from django.conf import settings
+import os
 
 import tensorflow as tf
 
@@ -9,21 +9,26 @@ def deep_dream(image_path, output_path):
     img = tf.keras.preprocessing.image.load_img(image_path)
     img_array = tf.keras.preprocessing.image.img_to_array(img)
     img_array = tf.keras.applications.inception_v3.preprocess_input(img_array)
-    img_array = tf.expand_dims(img_array, axis=0)
+
+    # Resize the image to match InceptionV3 input size
+    img_array_resized = tf.image.resize(img_array, (299, 299))
+    img_array_resized = tf.expand_dims(img_array_resized, axis=0)
 
     # Load the InceptionV3 model
-    base_model = tf.keras.applications.InceptionV3(include_top=False, weights='imagenet')
+    base_model = tf.keras.applications.InceptionV3(
+        include_top=False,
+        weights='/Users/peyman627/PycharmProjects/image_weaver/inception_v3_weights_tf_dim_ordering_tf_kernels_notop.h5'
+    )
 
     # Choose a layer for feature visualization
-    names = [layer.name for layer in base_model.layers]
-    layer_name = names[3]
+    layer_name = 'mixed3'  # Adjust this based on the layers available in InceptionV3
 
     # Create a model that maps the input image to the chosen layer's activations
     dream_model = tf.keras.Model(inputs=base_model.input, outputs=base_model.get_layer(layer_name).output)
 
     # Define the loss function
     def calc_loss(img, model):
-        img_batch = tf.expand_dims(img, axis=0)
+        img_batch = tf.keras.applications.inception_v3.preprocess_input(img)  # Preprocess the input image
         layer_activations = model(img_batch)
         return tf.reduce_mean(layer_activations)
 
@@ -47,16 +52,18 @@ def deep_dream(image_path, output_path):
         return img
 
     # Generate the deep dream image
-    dream_img = deepdream(model=dream_model, img=img_array)
+    dream_img = deepdream(model=dream_model, img=img_array_resized)
 
     # Save the resulting image
-    tf.keras.preprocessing.image.save_img(output_path, dream_img[0])
+    output_image_path = os.path.join(output_path, 'dream_result.jpg')
+    tf.keras.preprocessing.image.save_img(output_image_path, dream_img[0])
 
 
 async def main():
-    example_path = settings.MEDIA_ROOT / 'experiments/example.jpg'
-    output_path = settings.MEDIA_ROOT / 'experiments'
-    deep_dream(example_path, output_path)
+    example_path = '/Users/peyman627/PycharmProjects/image_weaver/media/experiments/example.jpg'
+    output_path = '/Users/peyman627/PycharmProjects/image_weaver/media/experiments/'
+
+    await asyncio.to_thread(deep_dream, example_path, output_path)
 
 
 if __name__ == '__main__':
